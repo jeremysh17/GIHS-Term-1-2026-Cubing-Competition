@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cubing Session Tracker</title>
+<style>
+  body { font-family: sans-serif; background: #0f1220; color: #fff; padding: 20px; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; margin: auto; background: #1a1d2b; }
+  th, td { border: 1px solid #333; padding: 8px; text-align: center; position: relative; color: #fff; }
+  th { background: #252a40; }
+  .pr-bubble {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: #3b85f5;
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    pointer-events: none;
+    transform: translate(25%, -25%);
+  }
+  .name-cell { cursor: text; color: #fff; }
+  button { margin: 5px; padding: 6px 12px; font-size: 1rem; background: #252a40; color: #fff; border: none; cursor: pointer; }
+  button:hover { background: #3b4060; }
+  #sheet-buttons { text-align:center; margin-bottom:10px; }
+  .rank-green { background: #28a745 !important; }
+</style>
+</head>
+<body>
+<h2 style="text-align:center" id="title">Cubing Session Tracker</h2>
+<div id="sheet-buttons">
+  <button onclick="addRow()">Add Name</button>
+  <button onclick="addEvent()">Add Event Sheet</button>
+  <button onclick="downloadCSV()">Download CSV</button>
+  <button onclick="renameTitle()">Change Title</button>
+  <span id="sheet-nav"></span>
+</div>
+<div id="sheets-container"></div>
+<script>
+let sheets = {};
+let currentSheet = '3x3';
+
+function createSheet(name) {
+  const container = document.getElementById('sheets-container');
+  const sheetDiv = document.createElement('div');
+  sheetDiv.id = `sheet-${name}`;
+  sheetDiv.style.display = (name === currentSheet) ? 'block' : 'none';
+  sheetDiv.innerHTML = `<h3 style='text-align:center'>${name} <button onclick="deleteSheet('${name}')">Delete Sheet</button></h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Name</th>
+          <th>Solve 1</th>
+          <th>Solve 2</th>
+          <th>Solve 3</th>
+          <th>Solve 4</th>
+          <th>Solve 5</th>
+          <th>Best</th>
+          <th>Ao5</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>`;
+  container.appendChild(sheetDiv);
+  sheets[name] = sheetDiv;
+  updateSheetNav();
+  loadData();
+}
+
+createSheet('3x3');
+
+function updateSheetNav() {
+  const nav = document.getElementById('sheet-nav');
+  nav.innerHTML = '';
+  for(let key in sheets){
+    const btn = document.createElement('button');
+    btn.textContent = key;
+    btn.onclick = ()=>switchSheet(key);
+    btn.style.margin='0 3px';
+    nav.appendChild(btn);
+  }
+}
+
+function switchSheet(name) {
+  for(let key in sheets){
+    sheets[key].style.display = (key===name)?'block':'none';
+  }
+  currentSheet = name;
+}
+
+function deleteSheet(name){
+  if(!confirm(`Delete sheet '${name}'?`)) return;
+  sheets[name].remove();
+  delete sheets[name];
+  if(currentSheet===name){
+    currentSheet = Object.keys(sheets)[0] || null;
+  }
+  updateSheetNav();
+}
+
+function renameTitle(){
+  const newTitle = prompt('Enter new title:', document.getElementById('title').textContent);
+  if(newTitle) document.getElementById('title').textContent = newTitle;
+  saveData();
+}
+
+function addRow() {
+  const tbody = sheets[currentSheet].querySelector('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td contenteditable onclick='toggleRank(this)'></td>
+    <td class='name-cell' contenteditable onblur='saveData()'>Name</td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td class='best' onclick='togglePR(this)'>—</td>
+    <td class='ao5' onclick='togglePR(this)'>—</td>`;
+  tbody.appendChild(tr);
+  saveData();
+  sortTable();
+}
+
+function toggleRank(cell){
+  cell.classList.toggle('rank-green');
+  saveData();
+}
+
+function addEvent() {
+  const name = prompt('Enter event name:');
+  if(!name || sheets[name]) return;
+  createSheet(name);
+  switchSheet(name);
+}
+
+function parseTime(value) {
+  if(!value) return null;
+  if(value.toLowerCase()==='dnf') return null;
+  if(value.includes(':')) {
+    const parts = value.split(':');
+    return parseFloat(parts[0])*60 + parseFloat(parts[1]);
+  }
+  return parseFloat(value);
+}
+
+function formatTime(seconds) {
+  if(seconds===null) return '';
+  if(seconds >= 60) {
+    const m = Math.floor(seconds/60);
+    let s = (seconds % 60).toFixed(3);
+    if(seconds % 60 < 10) s = '0' + s;  // pad seconds if <10
+    return `${m}:${s}`;
+  } else {
+    return seconds.toFixed(3);
+  }
+}
+
+function updateRow(cell) {
+  const row = cell.closest('tr');
+  const inputs = Array.from(row.querySelectorAll('td[contenteditable]:not(.name-cell)')).slice(1,6);
+  const times = inputs.map(c => parseTime(c.textContent));
+
+  const valid = times.filter(t=>t!==null);
+  const best = valid.length>0 ? Math.min(...valid) : null;
+
+  const ao5Cell = row.querySelector('.ao5');
+  const bestCell = row.querySelector('.best');
+  bestCell.textContent = formatTime(best);
+
+  // Ao5 only if 4 or more solves
+  let ao5 = null;
+  if(valid.length >= 4) {
+    if(valid.length === 5) {
+      const a = [...valid].sort((a,b)=>a-b);
+      ao5 = (a[1]+a[2]+a[3])/3;
+    } else {
+      ao5 = valid.reduce((sum,v)=>sum+v,0)/valid.length;
+    }
+    ao5Cell.textContent = formatTime(ao5);
+    if(!ao5Cell.querySelector('.pr-bubble') && ao5Cell.textContent !== '') {
+      const bubbleAo5 = document.createElement('span');
+      bubbleAo5.className='pr-bubble';
+      bubbleAo5.textContent='PR';
+      ao5Cell.appendChild(bubbleAo5);
+    }
+  } else {
+    ao5Cell.textContent = '';
+    ao5Cell.querySelectorAll('.pr-bubble').forEach(e=>e.remove());
+  }
+
+  // Best PR bubble
+  if(!bestCell.querySelector('.pr-bubble') && bestCell.textContent !== '') {
+    const bubbleBest = document.createElement('span');
+    bubbleBest.className='pr-bubble';
+    bubbleBest.textContent='PR';
+    bestCell.appendChild(bubbleBest);
+  }
+
+  saveData();
+  sortTable();
+}
+
+function togglePR(cell){
+  const existing = cell.querySelector('.pr-bubble');
+  if(existing){
+    existing.remove();
+  } else {
+    const bubble = document.createElement('span');
+    bubble.className = 'pr-bubble';
+    bubble.textContent = 'PR';
+    cell.appendChild(bubble);
+  }
+  saveData();
+}
+
+// Hybrid sorting: Ao5 first, then Best time
+function sortTable(){
+  const tbody = sheets[currentSheet].querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+
+  rows.sort((a,b)=>{
+    const ao5A = parseTime(a.querySelector('.ao5').textContent);
+    const ao5B = parseTime(b.querySelector('.ao5').textContent);
+    const bestA = parseTime(a.querySelector('.best').textContent);
+    const bestB = parseTime(b.querySelector('.best').textContent);
+
+    if(ao5A !== null && ao5B !== null) return ao5A - ao5B;
+    if(ao5A !== null) return -1;
+    if(ao5B !== null) return 1;
+    if(bestA === null) return 1;
+    if(bestB === null) return -1;
+    return bestA - bestB;
+  });
+
+  rows.forEach((row,i)=>{
+    row.querySelector('td:first-child').textContent = i+1;
+    tbody.appendChild(row);
+  });
+}
+
+function saveData() {
+  const data = {title: document.getElementById('title').textContent, sheets:{}};
+  for(let key in sheets){
+    const tbody = sheets[key].querySelector('tbody');
+    data.sheets[key] = Array.from(tbody.querySelectorAll('tr')).map(r=>{
+      const cells = Array.from(r.querySelectorAll('td'));
+      return {
+        rank: cells[0].textContent,
+        rankGreen: cells[0].classList.contains('rank-green'),
+        name: cells[1].textContent,
+        solves: cells.slice(2,7).map(c=>c.textContent),
+        best: cells[7].textContent,
+        ao5: cells[8].textContent
+      };
+    });
+  }
+  localStorage.setItem('cubingSheets', JSON.stringify(data));
+}
+
+function loadData(){
+  const saved = JSON.parse(localStorage.getItem('cubingSheets')||'{}');
+  if(saved.title) document.getElementById('title').textContent = saved.title;
+  for(let key in saved.sheets){
+    if(!sheets[key]) createSheet(key);
+    const tbody = sheets[key].querySelector('tbody');
+    tbody.innerHTML='';
+    saved.sheets[key].forEach(rdata=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td contenteditable onclick='toggleRank(this)'>${rdata.rank}</td>
+        <td class='name-cell' contenteditable onblur='saveData()'>${rdata.name}</td>
+        ${rdata.solves.map(v=>`<td contenteditable onblur='updateRow(this)'>${v}</td>`).join('')}
+        <td class='best' onclick='togglePR(this)'>—</td>
+        <td class='ao5' onclick='togglePR(this)'>—</td>`;
+      if(rdata.rankGreen) tr.querySelector('td:first-child').classList.add('rank-green');
+      tbody.appendChild(tr);
+
+      // Recalculate Best, Ao5, and PR bubbles
+      Array.from(tr.querySelectorAll('td[contenteditable]:not(.name-cell)')).forEach(c=>updateRow(c));
+    });
+  }
+}
+
+function downloadCSV(){
+  let csv='';
+  for(let key in sheets){
+    csv += `Event: ${key}\n`;
+    const rows = sheets[key].querySelectorAll('tr');
+    rows.forEach(r=>{
+      const cells = Array.from(r.querySelectorAll('td, th'));
+      csv += cells.map(c=>c.textContent.replace(/,/g,'')).join(',')+'\n';
+    });
+    csv+='\n';
+  }
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cubing_session.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+window.onload = loadData;
+</script>
+</body>
+</html>
