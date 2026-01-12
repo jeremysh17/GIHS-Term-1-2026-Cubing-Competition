@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cubing Session Tracker</title>
+<style>
+  body { font-family: sans-serif; background: #0f1220; color: #fff; padding: 20px; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; margin: auto; background: #1a1d2b; }
+  th, td { border: 1px solid #333; padding: 8px; text-align: center; position: relative; color: #fff; }
+  th { background: #252a40; }
+  
+  .bubble {
+    position: absolute;
+    top: 0; right: 0;
+    color: #fff; border-radius: 4px; padding: 2px 6px;
+    font-size: 0.7rem; font-weight: bold; pointer-events: none;
+    transform: translate(25%, -25%); z-index: 10;
+  }
+  .pr-bubble { background: #3b85f5; }
+  .sr-bubble { background: #28a745; }
+
+  .solve-best { color: #2ecc71 !important; font-weight: bold; }
+  .solve-worst { color: #e74c3c !important; font-weight: bold; }
+
+  .name-cell { cursor: text; color: #fff; }
+  button, select { margin: 3px; padding: 6px 12px; font-size: 1rem; background: #252a40; color: #fff; border: none; cursor: pointer; border-radius: 4px; }
+  button:hover, select:hover { background: #3b4060; }
+  #sheet-buttons { text-align:center; margin-bottom:10px; }
+  .rank-green { background: #28a745 !important; }
+  #sheet-nav { margin-bottom: 20px; text-align: center; display: flex; justify-content: center; align-items: center; gap: 10px; }
+  .del-btn { background: #c0392b; padding: 6px 12px; font-size: 1rem; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  .del-btn:hover { background: #e74c3c; }
+  .empty-msg { text-align: center; color: #888; margin-top: 50px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h2 style="text-align:center" id="title">Cubing Session Tracker</h2>
+
+<div id="sheet-buttons">
+  <button onclick="addRow()">Add Name</button>
+  <button onclick="addEvent()">Add Event</button>
+  <button onclick="addSubsheet()">Add Round</button>
+  <button onclick="clearSheet()">Clear Solves</button>
+  <button onclick="downloadCSV()">Download CSV</button>
+  <button onclick="importCSV()">Import CSV</button>
+  <button onclick="renameTitle()">Change Title</button>
+</div>
+
+<div id="sheet-nav"></div>
+<div id="sheets-container"></div>
+
+<script>
+let sheets = {};
+let currentSheet = null;
+
+function createSheet(name, parent=null) {
+  if (sheets[name]) return;
+  const container = document.getElementById('sheets-container');
+  const sheetDiv = document.createElement('div');
+  sheetDiv.id = `sheet-${name}`;
+  sheetDiv.dataset.parent = parent || '';
+  sheetDiv.style.display = 'none';
+
+  if (parent) {
+    sheetDiv.innerHTML = `<h3 style='text-align:center'>${name}</h3>
+      <table>
+        <thead>
+          <tr><th>Rank</th><th>Name</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>Best</th><th>Average</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>`;
+  } else {
+    sheetDiv.innerHTML = `<div class="empty-msg">Select a round for ${name} or add one.</div>`;
+  }
+
+  container.appendChild(sheetDiv);
+  sheets[name] = sheetDiv;
+  switchSheet(name);
+}
+
+function updateSheetNav() {
+  const nav = document.getElementById('sheet-nav');
+  nav.innerHTML = '';
+  const mainSheets = Object.keys(sheets).filter(k => !sheets[k].dataset.parent);
+  if (mainSheets.length === 0) return;
+
+  const eventSelect = document.createElement('select');
+  mainSheets.forEach(ms => {
+    const opt = document.createElement('option');
+    opt.value = ms; opt.textContent = ms;
+    eventSelect.appendChild(opt);
+  });
+
+  const activeMain = (currentSheet && sheets[currentSheet].dataset.parent) 
+                     ? sheets[currentSheet].dataset.parent 
+                     : currentSheet;
+  
+  eventSelect.value = activeMain;
+  eventSelect.onchange = () => switchSheet(eventSelect.value);
+  nav.appendChild(eventSelect);
+
+  const subs = Object.keys(sheets).filter(k => sheets[k].dataset.parent === activeMain);
+  if (subs.length > 0) {
+    const roundSelect = document.createElement('select');
+    const placeholder = document.createElement('option');
+    placeholder.textContent = "-- Select Round --"; placeholder.value = "";
+    roundSelect.appendChild(placeholder);
+
+    subs.forEach(ss => {
+      const opt = document.createElement('option');
+      opt.value = ss; opt.textContent = ss.replace(activeMain + ' - ', '');
+      roundSelect.appendChild(opt);
+    });
+
+    roundSelect.value = (sheets[currentSheet].dataset.parent === activeMain) ? currentSheet : "";
+    roundSelect.onchange = () => switchSheet(roundSelect.value);
+    nav.appendChild(roundSelect);
+  }
+
+  // Delete Event Button
+  const delBtn = document.createElement('button');
+  delBtn.textContent = 'Delete Event';
+  delBtn.className = 'del-btn';
+  delBtn.onclick = () => deleteEvent(activeMain);
+  nav.appendChild(delBtn);
+}
+
+function switchSheet(name) {
+  if(!name || !sheets[name]) return;
+  for(let key in sheets) sheets[key].style.display = 'none';
+  sheets[name].style.display = 'block';
+  currentSheet = name;
+  updateSheetNav();
+}
+
+function addRow() {
+  if(!currentSheet || !sheets[currentSheet].dataset.parent) {
+    alert("Please select a specific Round first.");
+    return;
+  }
+  const tbody = sheets[currentSheet].querySelector('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td contenteditable onclick='toggleRank(this)'></td>
+    <td class='name-cell' contenteditable onblur='saveData()'>Name</td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td contenteditable onblur='updateRow(this)'></td>
+    <td class='best' onclick='cycleRecord(this)'>—</td>
+    <td class='average' onclick='cycleRecord(this)'>—</td>`;
+  tbody.appendChild(tr);
+  saveData();
+}
+
+function parseTime(v) {
+  if (!v) return null;
+  v = v.trim().toLowerCase();
+  if(!v || v === 'dnf' || v === '—') return null;
+  if(v.includes(':')) {
+    const p = v.split(':');
+    return parseFloat(p[0]) * 60 + parseFloat(p[1]);
+  }
+  return parseFloat(v) || null;
+}
+
+function formatTime(s) {
+  if (s === Infinity) return 'DNF';
+  if (isNaN(s) || s === null) return '—';
+  if (s >= 60) {
+    const m = Math.floor(s / 60);
+    let sec = (s % 60).toFixed(3);
+    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+  }
+  return s.toFixed(3);
+}
+
+function updateRow(cell) {
+  const row = cell.closest('tr');
+  const solveCells = Array.from(row.querySelectorAll('td[contenteditable]')).slice(2, 7);
+  solveCells.forEach(c => c.classList.remove('solve-best', 'solve-worst'));
+
+  const times = solveCells.map(c => parseTime(c.innerText));
+  const enteredCount = solveCells.filter(c => c.innerText.trim() !== "").length;
+
+  if (enteredCount > 1) {
+    const comparisonTimes = solveCells.map(c => {
+        let t = parseTime(c.innerText);
+        return (t === null && c.innerText.trim().toLowerCase() === 'dnf') ? Infinity : t;
+    }).filter(t => t !== null);
+
+    const minVal = Math.min(...comparisonTimes);
+    const maxVal = Math.max(...comparisonTimes);
+
+    if (minVal !== maxVal) {
+      let bFound = false, wFound = false;
+      solveCells.forEach((c) => {
+        let t = parseTime(c.innerText) || (c.innerText.trim().toLowerCase()==='dnf' ? Infinity : null);
+        if (t === minVal && t !== Infinity && !bFound) { c.classList.add('solve-best'); bFound = true; }
+        if (t === maxVal && t !== null && !wFound) { c.classList.add('solve-worst'); wFound = true; }
+      });
+    }
+  }
+
+  const bCell = row.querySelector('.best');
+  const aCell = row.querySelector('.average');
+  const validTimes = times.filter(t => t !== null);
+  const best = validTimes.length > 0 ? Math.min(...validTimes) : null;
+  
+  bCell.firstChild.textContent = formatTime(best);
+
+  if(enteredCount >= 4) {
+    const timesWithDNF = solveCells.map(c => {
+        let t = parseTime(c.innerText);
+        return (t === null && c.innerText.trim().toLowerCase() === 'dnf') ? Infinity : t;
+    }).filter(t => t !== null);
+
+    if (timesWithDNF.length === 5) {
+        const sorted = [...timesWithDNF].sort((a,b) => a - b);
+        if (timesWithDNF.filter(t => t === Infinity).length >= 2) aCell.firstChild.textContent = 'DNF';
+        else aCell.firstChild.textContent = formatTime((sorted[1] + sorted[2] + sorted[3]) / 3);
+    }
+  } else aCell.firstChild.textContent = '—';
+
+  saveData();
+  sortTable();
+}
+
+function sortTable() {
+  if (!currentSheet || !sheets[currentSheet].dataset.parent) return;
+  const tbody = sheets[currentSheet].querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+
+  rows.sort((a, b) => {
+    const getVal = (row, selector) => {
+      const text = row.querySelector(selector).innerText.trim();
+      if (text === 'DNF') return 99998;
+      const p = parseTime(text);
+      return (p === null || text === '—' || text === '') ? 99999 : p;
+    };
+    const avgA = getVal(a, '.average'), avgB = getVal(b, '.average');
+    if (avgA !== avgB) return avgA - avgB;
+    return getVal(a, '.best') - getVal(b, '.best');
+  });
+
+  rows.forEach((r, i) => { 
+    r.querySelector('td:first-child').innerText = i + 1; 
+    tbody.appendChild(r); 
+  });
+}
+
+function cycleRecord(cell, type = null) {
+  const ex = cell.querySelector('.bubble');
+  let next = type || (!ex ? 'PR' : (ex.classList.contains('pr-bubble') ? 'SR' : null));
+  if (ex) ex.remove();
+  if (next) {
+    const s = document.createElement('span');
+    s.className = `bubble ${next.toLowerCase()}-bubble`;
+    s.textContent = next;
+    cell.appendChild(s);
+  }
+  saveData();
+}
+
+function deleteEvent(name) {
+  if (!confirm(`Are you sure you want to delete the event "${name}" and all its rounds?`)) return;
+  
+  Object.keys(sheets).forEach(key => {
+    if (key === name || sheets[key].dataset.parent === name) {
+      sheets[key].remove();
+      delete sheets[key];
+    }
+  });
+
+  const remaining = Object.keys(sheets);
+  currentSheet = remaining.length > 0 ? remaining[0] : null;
+  
+  if (currentSheet) switchSheet(currentSheet);
+  else {
+    document.getElementById('sheet-nav').innerHTML = '';
+    document.getElementById('sheets-container').innerHTML = '';
+  }
+  saveData();
+}
+
+function downloadCSV() {
+  let csv = `Title,${document.getElementById('title').textContent}\n\n`;
+  for (let key in sheets) {
+    const isRound = !!sheets[key].dataset.parent;
+    csv += `SHEET,${key},${sheets[key].dataset.parent || ""}\n`;
+    if (isRound) {
+      csv += "Rank,Name,S1,S2,S3,S4,S5,Best,Average\n";
+      sheets[key].querySelectorAll('tbody tr').forEach(r => {
+        const rowData = Array.from(r.cells).map(c => {
+          let val = c.innerText.replace(/,/g, '');
+          return `"${val}"`;
+        });
+        csv += rowData.join(',') + '\n';
+      });
+    }
+    csv += "END_SHEET\n\n";
+  }
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cubing_tracker.csv';
+  a.click();
+}
+
+function importCSV() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.csv';
+  input.onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('sheets-container').innerHTML = '';
+      sheets = {};
+      const lines = ev.target.result.split('\n');
+      let active = null;
+      lines.forEach(l => {
+        const p = l.split(',').map(x => x.replace(/"/g, '').trim());
+        if (p[0] === 'Title') document.getElementById('title').textContent = p[1];
+        else if (p[0] === 'SHEET') { active = p[1]; createSheet(p[1], p[2] || null); }
+        else if (active && p.length >= 9 && p[0] !== 'Rank' && p[0] !== 'END_SHEET' && p[0] !== '') {
+          const tbody = sheets[active].querySelector('tbody');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td contenteditable onclick='toggleRank(this)'>${p[0]}</td>
+            <td class='name-cell' contenteditable onblur='saveData()'>${p[1]}</td>
+            <td contenteditable onblur='updateRow(this)'>${p[2]}</td>
+            <td contenteditable onblur='updateRow(this)'>${p[3]}</td>
+            <td contenteditable onblur='updateRow(this)'>${p[4]}</td>
+            <td contenteditable onblur='updateRow(this)'>${p[5]}</td>
+            <td contenteditable onblur='updateRow(this)'>${p[6]}</td>
+            <td class='best' onclick='cycleRecord(this)'>${p[7]}</td>
+            <td class='average' onclick='cycleRecord(this)'>${p[8]}</td>`;
+          tbody.appendChild(tr);
+          updateRow(tr.cells[2]);
+        }
+      });
+      updateSheetNav(); saveData();
+    };
+    reader.readAsText(e.target.files[0]);
+  };
+  input.click();
+}
+
+function saveData() {
+  const data = { title: document.getElementById('title').textContent, sheets: {} };
+  for (let k in sheets) {
+    const tb = sheets[k].querySelector('tbody');
+    data.sheets[k] = tb ? Array.from(tb.querySelectorAll('tr')).map(r => ({
+      name: r.cells[1].textContent, solves: Array.from(r.cells).slice(2,7).map(c=>c.innerText),
+      best: r.cells[7].firstChild.textContent, bestRec: r.cells[7].querySelector('.bubble')?.textContent,
+      ao5: r.cells[8].firstChild.textContent, ao5Rec: r.cells[8].querySelector('.bubble')?.textContent,
+      parent: sheets[k].dataset.parent, rankGreen: r.cells[0].classList.contains('rank-green')
+    })) : [];
+  }
+  localStorage.setItem('cubingTrackerV12', JSON.stringify(data));
+}
+
+function loadData() {
+  const saved = JSON.parse(localStorage.getItem('cubingTrackerV12') || '{}');
+  if (saved.title) document.getElementById('title').textContent = saved.title;
+  for (let k in saved.sheets) {
+    createSheet(k, saved.sheets[k][0]?.parent || (k.includes(' - ') ? k.split(' - ')[0] : null));
+    const tb = sheets[k].querySelector('tbody');
+    if (tb) saved.sheets[k].forEach(d => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td contenteditable onclick='toggleRank(this)'></td><td class='name-cell' contenteditable onblur='saveData()'>${d.name}</td>
+        ${d.solves.map(s => `<td contenteditable onblur='updateRow(this)'>${s}</td>`).join('')}
+        <td class='best' onclick='cycleRecord(this)'>${d.best}</td><td class='average' onclick='cycleRecord(this)'>${d.ao5}</td>`;
+      if (d.rankGreen) tr.cells[0].classList.add('rank-green');
+      if (d.bestRec) cycleRecord(tr.cells[7], d.bestRec);
+      if (d.ao5Rec) cycleRecord(tr.cells[8], d.ao5Rec);
+      tb.appendChild(tr); updateRow(tr.cells[2]);
+    });
+  }
+}
+
+function addEvent() { const n = prompt('Event:'); if(n) createSheet(n); }
+function addSubsheet() { 
+  if(currentSheet) { 
+    const p = sheets[currentSheet].dataset.parent || currentSheet; 
+    const n = prompt('Round:'); if(n) createSheet(`${p} - ${n}`, p); 
+  } else { alert("Select an event first."); }
+}
+function renameTitle() { const n = prompt('Title:', document.getElementById('title').textContent); if(n) { document.getElementById('title').textContent = n; saveData(); } }
+function toggleRank(c){ c.classList.toggle('rank-green'); saveData(); }
+function clearSheet() { if(confirm("Clear times?")) { sheets[currentSheet].querySelectorAll('tbody tr').forEach(r => { for(let i=2;i<7;i++) r.cells[i].innerText=''; updateRow(r.cells[2]); }); } }
+
+window.onload = loadData;
+</script>
+</body>
+</html>
