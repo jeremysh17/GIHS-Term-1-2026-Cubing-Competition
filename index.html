@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quirky Questions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #F7F6F3; --surface: #FFFFFF; --border: #E8E6E0;
+      --text: #1A1916; --muted: #8C8880; --accent: #2C2C2C;
+      --tag: #F0EDE8; --gold: #C9A84C; --gold-bg: #FBF6EC;
+      --silver: #9BA3AF; --bronze: #C4865A;
+      --green: #059669; --green-bg: #ECFDF5;
+      --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 15px; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; }
+
+    /* ── AUTH ── */
+    #auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 48px 40px; width: 100%; max-width: 400px; box-shadow: var(--shadow); }
+    .auth-logo { font-family: 'DM Serif Display', serif; font-size: 26px; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .auth-logo span { font-style: italic; color: var(--muted); }
+    .auth-tagline { color: var(--muted); font-size: 13.5px; margin-bottom: 36px; }
+    .auth-tabs { display: flex; background: var(--tag); border-radius: 8px; padding: 3px; margin-bottom: 28px; }
+    .auth-tab { flex: 1; padding: 8px; border: none; background: transparent; border-radius: 6px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 500;
+      color: var(--muted); transition: all 0.15s; }
+    .auth-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .auth-error { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C;
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+
+    /* ── FORM ELEMENTS ── */
+    label { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.3px; }
+    input[type="email"], input[type="password"], input[type="text"], input[type="number"], textarea {
+      width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text); background: var(--bg);
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s; margin-bottom: 16px; }
+    input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(44,44,44,0.07); }
+    textarea { resize: vertical; min-height: 90px; }
+    input.inline { margin-bottom: 0; }
+
+    /* ── BUTTONS ── */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 8px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; width: 100%; }
+    .btn-primary:hover { background: #111; }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--tag); color: var(--text); }
+    .btn-sm  { padding: 7px 14px; font-size: 13px; border-radius: 7px; }
+    .btn-xs  { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+    /* ── APP SHELL ── */
+    #app-screen { display: none; min-height: 100vh; }
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px;
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100; }
+    .topbar-logo { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.3px; }
+    .topbar-logo span { font-style: italic; color: var(--muted); }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-username { font-size: 13px; color: var(--muted); }
+    .nav-tabs { display: flex; gap: 2px; background: var(--tag); border-radius: 9px; padding: 3px; }
+    .nav-tab { padding: 7px 16px; border: none; background: transparent; border-radius: 7px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+      color: var(--muted); transition: all 0.15s; }
+    .nav-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+    /* ── PAGES ── */
+    .page { display: none; }
+    .page.active { display: block; }
+    .main { max-width: 700px; margin: 0 auto; padding: 48px 24px 80px; }
+    .section-label { font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+
+    /* ── QUESTION CARD ── */
+    .question-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow); margin-bottom: 16px; }
+    .question-card.today { border-color: var(--accent); }
+    .question-date { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .question-text { font-family: 'DM Serif Display', serif; font-size: 24px;
+      line-height: 1.35; letter-spacing: -0.3px; margin-bottom: 4px; }
+    .attempt-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+      color: var(--muted); margin-bottom: 18px; margin-top: 4px; }
+    .attempt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .attempt-dot.used { background: var(--accent); }
+    .attempt-dot.locked { background: #EF4444; }
+
+    /* ── ANSWER THREAD ── */
+    .answer-thread { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .answer-bubble { border-radius: 10px; padding: 13px 16px; font-size: 14px; line-height: 1.55; }
+    .answer-bubble.user-answer { background: var(--tag); border-left: 3px solid var(--accent); }
+    .answer-bubble.admin-reply { background: var(--green-bg); border-left: 3px solid var(--green); }
+    .bubble-label { font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 5px; }
+    .bubble-label.user { color: var(--muted); }
+    .bubble-label.admin { color: var(--green); }
+    .attempt-number { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .answer-form { margin-top: 16px; }
+    .out-of-attempts { margin-top: 16px; padding: 13px 16px; background: var(--tag);
+      border-radius: 8px; font-size: 13.5px; color: var(--muted); font-style: italic; }
+
+    /* ── PAST CARDS ── */
+    .past-section { margin-top: 48px; }
+    .past-list { display: flex; flex-direction: column; gap: 12px; }
+    .past-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px; cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s; }
+    .past-card:hover { border-color: #ccc; box-shadow: var(--shadow); }
+    .past-card.expanded { border-color: var(--accent); }
+    .past-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .past-card-question { font-family: 'DM Serif Display', serif; font-size: 17px; line-height: 1.4; margin-bottom: 4px; }
+    .past-card-meta { font-size: 12px; color: var(--muted); }
+    .past-chevron { font-size: 18px; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; margin-top: 2px; }
+    .past-card.expanded .past-chevron { transform: rotate(180deg); }
+    .past-card-body { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .past-card.expanded .past-card-body { display: block; }
+
+    /* ── SCOREBOARD ── */
+    .scoreboard { display: flex; flex-direction: column; gap: 10px; }
+    .score-row { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px; display: flex;
+      align-items: center; gap: 16px; transition: box-shadow 0.15s; }
+    .score-row:hover { box-shadow: var(--shadow); }
+    .score-rank { font-size: 13px; font-weight: 600; color: var(--muted); width: 28px; text-align: center; flex-shrink: 0; }
+    .rank-1 { color: var(--gold); font-size: 20px; }
+    .rank-2 { color: var(--silver); font-size: 18px; }
+    .rank-3 { color: var(--bronze); font-size: 18px; }
+    .score-name { flex: 1; font-weight: 500; font-size: 15px; }
+    .score-name.is-you::after { content: ' (you)'; font-size: 12px; color: var(--muted); font-weight: 400; }
+    .score-right { text-align: right; }
+    .score-pts { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: -0.5px; }
+    .score-pts-label { font-size: 11px; color: var(--muted); }
+    .score-row.top-1 { border-color: var(--gold); background: var(--gold-bg); }
+
+    /* ── ADMIN ── */
+    .admin-section { margin-bottom: 40px; }
+    .admin-section + .admin-section { padding-top: 40px; border-top: 1px solid var(--border); }
+    .admin-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); overflow-x: auto; }
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .admin-table th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--muted); padding: 0 12px 12px; border-bottom: 1px solid var(--border); }
+    .admin-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: var(--bg); }
+    .num-input { width: 60px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 14px; font-family: 'DM Sans', sans-serif; text-align: center;
+      background: var(--bg); color: var(--text); margin-bottom: 0; }
+    .num-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(44,44,44,0.07); outline: none; }
+
+    /* answer review cards in admin */
+    .review-q { margin-bottom: 32px; }
+    .review-q-title { font-family: 'DM Serif Display', serif; font-size: 17px; margin-bottom: 4px; }
+    .review-q-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .review-user-block { background: var(--bg); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+    .review-username { font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
+    .review-attempt { margin-bottom: 10px; padding: 10px 12px; border-radius: 8px;
+      background: var(--surface); border: 1px solid var(--border); }
+    .review-attempt-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .review-attempt-text { font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+    .review-reply-area { margin-top: 8px; }
+    .review-reply-box { width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 13.5px;
+      background: var(--surface); color: var(--text); outline: none; resize: vertical;
+      min-height: 60px; margin-bottom: 6px; }
+    .review-reply-box:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(44,44,44,0.07); }
+    .existing-reply { background: var(--green-bg); border-left: 3px solid var(--green);
+      border-radius: 8px; padding: 10px 13px; font-size: 13.5px; margin-bottom: 6px; line-height: 1.5; }
+    .existing-reply-label { font-size: 11px; color: var(--green); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+    .reply-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── UTILS ── */
+    .loading { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 0; }
+    .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 32px;
+      background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
+    .hidden { display: none !important; }
+    #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--accent); color: #fff; padding: 12px 22px; border-radius: 100px;
+      font-size: 13.5px; font-weight: 500; opacity: 0; pointer-events: none;
+      transition: all 0.25s; z-index: 999; white-space: nowrap; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 540px) {
+      .auth-card { padding: 32px 24px; }
+      .topbar { padding: 0 16px; }
+      .topbar-username { display: none; }
+      .nav-tab { padding: 7px 10px; font-size: 12px; }
+      .main { padding: 28px 16px 60px; }
+      .question-text { font-size: 20px; }
+      .question-card { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ AUTH ══════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">Quirky <span>Questions</span></div>
+    <p class="auth-tagline">A new question, every single day.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Sign in</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Create account</button>
+    </div>
+    <div id="auth-error" class="auth-error"></div>
+
+    <div id="login-form">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="you@example.com" />
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" />
+      <button class="btn btn-primary" id="login-btn" onclick="handleLogin()">Sign in</button>
+    </div>
+
+    <div id="signup-form" class="hidden">
+      <label>Username</label>
+      <input type="text" id="signup-username" placeholder="e.g. coolpanda42" maxlength="30" />
+      <label>Email</label>
+      <input type="email" id="signup-email" placeholder="you@example.com" />
+      <label>Password</label>
+      <input type="password" id="signup-password" placeholder="At least 6 characters" />
+      <button class="btn btn-primary" id="signup-btn" onclick="handleSignup()">Create account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════════════ -->
+<div id="app-screen">
+  <nav class="topbar">
+    <div class="topbar-logo">Quirky <span>Questions</span></div>
+    <div class="topbar-right">
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="showPage('questions')">Questions</button>
+        <button class="nav-tab" onclick="showPage('scoreboard')">Scoreboard</button>
+        <button class="nav-tab admin-only hidden" onclick="showPage('admin')">Admin ⚙️</button>
+      </div>
+      <span class="topbar-username" id="topbar-username"></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </nav>
+
+  <!-- Questions page -->
+  <div class="page active" id="page-questions">
+    <div class="main">
+      <div class="section-label">Today's Question</div>
+      <div id="today-section"><div class="loading">Loading…</div></div>
+      <div class="past-section">
+        <div class="section-label">Past Questions</div>
+        <div id="past-section"><div class="loading">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scoreboard page -->
+  <div class="page" id="page-scoreboard">
+    <div class="main">
+      <div class="section-label">Scoreboard</div>
+      <div id="scoreboard-section"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Admin page -->
+  <div class="page" id="page-admin">
+    <div class="main">
+      <div class="admin-section">
+        <div class="section-label">Scores</div>
+        <p style="font-size:13.5px;color:var(--muted);margin-bottom:20px">Set each player's points manually.</p>
+        <div class="admin-card">
+          <div id="admin-scores-section"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+      <div class="admin-section">
+        <div class="section-label">Review Answers &amp; Reply</div>
+        <p style="font-size:13.5px;color:var(--muted);margin-bottom:20px">Your replies are shown privately to each user under their answer.</p>
+        <div id="admin-answers-section"><div class="loading">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  CONFIG  — fill in your three values
+// ════════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://dstbzfkqirxupedmizyk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzdGJ6ZmtxaXJ4dXBlZG1penlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MTM0NDUsImV4cCI6MjA5NDQ4OTQ0NX0.ZQBeBOJAxvO2ypfgs6dX4Ji_c0EML28T1bljpCIpvHE';
+// Your Supabase User UID → unlocks Admin tab
+// Find it: Supabase → Authentication → Users → your row → copy UID
+const ADMIN_USER_ID     = '3dce6644-9592-40d0-a40b-1a36f7c94e04';
+// ════════════════════════════════════════════════════
+
+const { createClient } = supabase;
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('auth-screen');
+    if (el) el.innerHTML = `<div style="font-family:sans-serif;padding:40px;max-width:480px;margin:auto;text-align:center">
+      <h2 style="margin-bottom:12px">⚙️ Setup required</h2>
+      <p style="color:#666">Open this file and fill in <code>SUPABASE_URL</code>, <code>SUPABASE_ANON_KEY</code>, and <code>ADMIN_USER_ID</code> at the top of the &lt;script&gt; block.</p>
+    </div>`;
+  });
+  throw new Error('Supabase config is missing — fill in SUPABASE_URL and SUPABASE_ANON_KEY.');
+}
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser    = null;
+let currentProfile = null;
+let activePage     = 'questions';
+
+// ── INIT ──────────────────────────────────────────────
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { currentUser = session.user; await afterLogin(); }
+  sb.auth.onAuthStateChange(async (_e, session) => {
+    if (session) { currentUser = session.user; await afterLogin(); }
+    else { currentUser = null; currentProfile = null; showAuthScreen(); }
+  });
+}
+
+async function afterLogin() {
+  try {
+    const { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+    currentProfile = data;
+  } catch (e) {
+    currentProfile = null;
+  }
+  showAppScreen();
+}
+
+// ── AUTH ──────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t, i) =>
+    t.classList.toggle('active', (i === 0) === (tab === 'login')));
+  document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+  document.getElementById('signup-form').classList.toggle('hidden', tab !== 'signup');
+  clearAuthError();
+}
+function showAuthError(msg) { const e = document.getElementById('auth-error'); e.textContent = msg; e.style.display = 'block'; }
+function clearAuthError()   { document.getElementById('auth-error').style.display = 'none'; }
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  if (!email || !pass) return showAuthError('Please fill in all fields.');
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled = false; btn.textContent = 'Sign in';
+  if (error) showAuthError(error.message);
+}
+
+async function handleSignup() {
+  const username = document.getElementById('signup-username').value.trim();
+  const email    = document.getElementById('signup-email').value.trim();
+  const pass     = document.getElementById('signup-password').value;
+  if (!username) return showAuthError('Please choose a username.');
+  if (!/^[a-zA-Z0-9_]{2,30}$/.test(username))
+    return showAuthError('Username: 2–30 chars, letters/numbers/underscores only.');
+  if (!email || !pass) return showAuthError('Please fill in all fields.');
+  if (pass.length < 6) return showAuthError('Password must be at least 6 characters.');
+  const { data: existing } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
+  if (existing) return showAuthError('That username is taken — try another.');
+  const btn = document.getElementById('signup-btn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  const { data, error } = await sb.auth.signUp({ email, password: pass });
+  if (error) { btn.disabled = false; btn.textContent = 'Create account'; return showAuthError(error.message); }
+  await sb.from('profiles').insert({ id: data.user.id, username, points: 0 });
+  btn.disabled = false; btn.textContent = 'Create account';
+  showToast('Account created! Signing you in…');
+}
+
+async function handleLogout() { await sb.auth.signOut(); }
+
+// ── SCREENS ───────────────────────────────────────────
+function showAppScreen() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display  = 'block';
+  document.getElementById('topbar-username').textContent = currentProfile?.username ?? '';
+  document.querySelectorAll('.admin-only').forEach(el =>
+    el.classList.toggle('hidden', currentUser?.id !== ADMIN_USER_ID));
+  // reset cache so fresh data loads on login
+  pageLoaded.questions = false;
+  pageLoaded.scoreboard = false;
+  pageLoaded.admin = false;
+  loadPage('questions', true);
+}
+function showAuthScreen() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display  = 'none';
+}
+
+// track what's been loaded so we don't flash "Loading…" on repeat tab switches
+const pageLoaded = { questions: false, scoreboard: false, admin: false };
+
+function showPage(page) {
+  activePage = page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  const idx = { questions: 0, scoreboard: 1, admin: 2 };
+  document.querySelectorAll('.nav-tab')[idx[page]]?.classList.add('active');
+  loadPage(page);
+}
+function loadPage(page, force = false) {
+  if (page === 'questions')  { if (force || !pageLoaded.questions)  { pageLoaded.questions  = true; loadQuestions(); } }
+  if (page === 'scoreboard') { if (force || !pageLoaded.scoreboard) { pageLoaded.scoreboard = true; loadScoreboard(); } }
+  if (page === 'admin' && currentUser?.id === ADMIN_USER_ID) {
+    if (force || !pageLoaded.admin) { pageLoaded.admin = true; loadAdmin(); }
+  }
+}
+
+// ── QUESTIONS ─────────────────────────────────────────
+async function loadQuestions() {
+  const today = localDateStr();
+  const [{ data: questions, error }, { data: myAttempts }] = await Promise.all([
+    sb.from('questions').select('*').order('question_date', { ascending: false }),
+    sb.from('attempts').select('*').eq('user_id', currentUser.id),
+  ]);
+
+  if (error) {
+    document.getElementById('today-section').innerHTML = `<div class="empty">Could not load questions. Check your Supabase config.</div>`;
+    return;
+  }
+
+  // Fetch replies keyed to the user's own attempt IDs (replies.user_id is the admin's id, not ours)
+  let myReplies = [];
+  if (myAttempts && myAttempts.length > 0) {
+    const attemptIds = myAttempts.map(a => a.id);
+    const { data: repliesData } = await sb.from('replies').select('*').in('attempt_id', attemptIds);
+    myReplies = repliesData || [];
+  }
+
+  // Group attempts and replies by question
+  const attemptsByQ = {};
+  (myAttempts || []).forEach(a => {
+    if (!attemptsByQ[a.question_id]) attemptsByQ[a.question_id] = [];
+    attemptsByQ[a.question_id].push(a);
+  });
+  // Sort attempts ascending by attempt_number
+  Object.values(attemptsByQ).forEach(arr => arr.sort((a, b) => a.attempt_number - b.attempt_number));
+
+  const repliesByAttempt = {};
+  (myReplies || []).forEach(r => { repliesByAttempt[r.attempt_id] = r; });
+
+  const todayQ = (questions || []).find(q => q.question_date === today);
+  const pastQs  = (questions || []).filter(q => q.question_date !== today);
+
+  renderToday(todayQ, attemptsByQ, repliesByAttempt);
+  renderPast(pastQs, attemptsByQ, repliesByAttempt);
+}
+
+function attemptDotsHTML(used, max) {
+  if (!max) return '';
+  const dots = Array.from({ length: max }, (_, i) => {
+    const cls = i < used ? 'used' : '';
+    return `<span class="attempt-dot ${cls}"></span>`;
+  }).join('');
+  const remaining = max - used;
+  const label = remaining === 0
+    ? 'No attempts remaining'
+    : `${remaining} attempt${remaining !== 1 ? 's' : ''} remaining`;
+  return `<div class="attempt-badge">${dots}<span>${label}</span></div>`;
+}
+
+function threadHTML(attempts, repliesByAttempt, questionId, maxAttempts, isInPastCard, isPast) {
+  const used = attempts.length;
+  const limitReached = maxAttempts && used >= maxAttempts;
+  const prefix = isInPastCard ? `past-${questionId}` : `today-${questionId}`;
+
+  const bubblesHTML = attempts.map(a => {
+    const reply = repliesByAttempt[a.id];
+    return `
+      <div class="answer-bubble user-answer">
+        <div class="bubble-label user">Attempt ${a.attempt_number}</div>
+        ${esc(a.answer_text)}
+      </div>
+      ${reply ? `
+        <div class="answer-bubble admin-reply">
+          <div class="bubble-label admin">Reply</div>
+          ${esc(reply.reply_text)}
+        </div>` : ''}`;
+  }).join('');
+
+  let formHTML;
+  if (isPast) {
+    formHTML = used === 0
+      ? `<div class="out-of-attempts">This question has closed.</div>`
+      : '';
+  } else if (limitReached) {
+    formHTML = `<div class="out-of-attempts">You've used all ${maxAttempts} attempt${maxAttempts !== 1 ? 's' : ''} for this question.</div>`;
+  } else {
+    formHTML = `<div class="answer-form">
+         <label>Attempt ${used + 1}${maxAttempts ? ` of ${maxAttempts}` : ''}</label>
+         <textarea id="ans-${prefix}" placeholder="Write your answer…"></textarea>
+         <button class="btn btn-primary" style="width:auto"
+           onclick="${isInPastCard ? `event.stopPropagation();` : ''}submitAnswer('${questionId}','ans-${prefix}',this)">
+           Submit answer
+         </button>
+       </div>`;
+  }
+
+  return `
+    ${attemptDotsHTML(used, maxAttempts)}
+    ${used > 0 ? `<div class="answer-thread">${bubblesHTML}</div>` : ''}
+    ${formHTML}`;
+}
+
+function renderToday(question, attemptsByQ, repliesByAttempt) {
+  const el = document.getElementById('today-section');
+  if (!question) { el.innerHTML = `<div class="empty">No question for today yet — check back soon!</div>`; return; }
+  const attempts = attemptsByQ[question.id] || [];
+  el.innerHTML = `
+    <div class="question-card today">
+      <div class="question-date">${formatDate(question.question_date)}</div>
+      <div class="question-text">${esc(question.question_text)}</div>
+      ${threadHTML(attempts, repliesByAttempt, question.id, question.max_attempts, false, false)}
+    </div>`;
+}
+
+function renderPast(questions, attemptsByQ, repliesByAttempt) {
+  const el = document.getElementById('past-section');
+  if (!questions.length) { el.innerHTML = `<div class="empty">No past questions yet.</div>`; return; }
+  el.innerHTML = `<div class="past-list">${questions.map(q => {
+    const attempts = attemptsByQ[q.id] || [];
+    const hasActivity = attempts.length > 0;
+    return `
+      <div class="past-card" id="past-card-${q.id}" onclick="togglePast('${q.id}')">
+        <div class="past-card-header">
+          <div>
+            <div class="past-card-question">${esc(q.question_text)}</div>
+            <div class="past-card-meta">${formatDate(q.question_date)}${hasActivity ? ` · ${attempts.length} attempt${attempts.length !== 1 ? 's' : ''}` : ''}</div>
+          </div>
+          <div class="past-chevron">⌄</div>
+        </div>
+        <div class="past-card-body">
+          ${threadHTML(attempts, repliesByAttempt, q.id, q.max_attempts, true, true)}
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function togglePast(id) { document.getElementById(`past-card-${id}`).classList.toggle('expanded'); }
+
+async function submitAnswer(questionId, textareaId, btn) {
+  const text = document.getElementById(textareaId)?.value?.trim();
+  if (!text) { showToast('Please write an answer first.'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const { data: existingAttempts, error: countErr } = await sb.from('attempts')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .eq('question_id', questionId);
+
+    if (countErr) throw new Error(countErr.message);
+
+    const attemptNumber = (existingAttempts ? existingAttempts.length : 0) + 1;
+
+    const { error: insertErr } = await sb.from('attempts').insert({
+      user_id: currentUser.id,
+      question_id: questionId,
+      answer_text: text,
+      attempt_number: attemptNumber,
+    });
+
+    if (insertErr) throw new Error(insertErr.message);
+
+    showToast('Answer submitted!');
+    pageLoaded.questions = false;
+    loadPage(activePage, true);
+  } catch (e) {
+    console.error('submitAnswer error:', e);
+    showToast('Error: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Submit answer';
+  }
+}
+
+// ── SCOREBOARD ────────────────────────────────────────
+async function loadScoreboard() {
+  document.getElementById('scoreboard-section').innerHTML = `<div class="loading">Loading…</div>`;
+  const { data: profiles } = await sb.from('profiles').select('*');
+  if (!profiles) { document.getElementById('scoreboard-section').innerHTML = `<div class="empty">Could not load.</div>`; return; }
+
+  const rows = profiles
+    .map(p => ({ id: p.id, username: p.username || 'Unknown', total: p.points || 0 }))
+    .sort((a, b) => b.total - a.total || a.username.localeCompare(b.username));
+
+  const medals = ['🥇', '🥈', '🥉'];
+  document.getElementById('scoreboard-section').innerHTML = rows.length === 0
+    ? `<div class="empty">No players yet.</div>`
+    : `<div class="scoreboard">${rows.map((r, i) => `
+        <div class="score-row ${i === 0 ? 'top-1' : ''}">
+          <div class="score-rank ${i < 3 ? 'rank-'+(i+1) : ''}">${i < 3 ? medals[i] : i + 1}</div>
+          <div class="score-name ${r.id === currentUser.id ? 'is-you' : ''}">${esc(r.username)}</div>
+          <div class="score-right">
+            <div class="score-pts">${r.total}</div>
+            <div class="score-pts-label">pts</div>
+          </div>
+        </div>`).join('')}
+      </div>`;
+}
+
+// ── ADMIN ─────────────────────────────────────────────
+async function loadAdmin() {
+  document.getElementById('admin-scores-section').innerHTML  = `<div class="loading">Loading…</div>`;
+  document.getElementById('admin-answers-section').innerHTML = `<div class="loading">Loading…</div>`;
+
+  const [
+    { data: profiles, error: profilesErr },
+    { data: questions },
+    { data: attempts },
+    { data: replies }
+  ] = await Promise.all([
+    sb.from('profiles').select('*'),
+    sb.from('questions').select('*').order('question_date', { ascending: false }),
+    sb.from('attempts').select('*').order('attempt_number', { ascending: true }),
+    sb.from('replies').select('*'),
+  ]);
+
+  // ── Scores table ──
+  if (profilesErr) {
+    document.getElementById('admin-scores-section').innerHTML = `<div class="empty">Could not load profiles: ${esc(profilesErr.message)}</div>`;
+  } else if (!profiles || profiles.length === 0) {
+    document.getElementById('admin-scores-section').innerHTML = `<div class="empty">No players yet.</div>`;
+  } else {
+    const sorted = [...profiles].sort((a, b) => (b.points || 0) - (a.points || 0));
+    document.getElementById('admin-scores-section').innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>Username</th><th>Points</th><th></th></tr></thead>
+        <tbody>${sorted.map(p => `
+          <tr>
+            <td><strong>${esc(p.username)}</strong></td>
+            <td><input type="number" class="num-input" id="pts-${p.id}" value="${p.points || 0}" min="0" /></td>
+            <td><button class="btn btn-ghost btn-xs" onclick="savePoints('${p.id}')">Save</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ── Answers review ──
+  if (!questions || !attempts) {
+    document.getElementById('admin-answers-section').innerHTML = `<div class="empty">No answers yet.</div>`; return;
+  }
+
+  const userMap    = {};
+  (profiles || []).forEach(p => { userMap[p.id] = p.username || p.id.slice(0, 8); });
+  const replyMap   = {};
+  (replies   || []).forEach(r => { replyMap[r.attempt_id] = r; });
+
+  // Group attempts by question then by user
+  const attemptsByQ = {};
+  (questions || []).forEach(q => { attemptsByQ[q.id] = {}; });
+  (attempts  || []).forEach(a => {
+    if (!attemptsByQ[a.question_id]) return;
+    if (!attemptsByQ[a.question_id][a.user_id]) attemptsByQ[a.question_id][a.user_id] = [];
+    attemptsByQ[a.question_id][a.user_id].push(a);
+  });
+
+  document.getElementById('admin-answers-section').innerHTML = (questions || []).map(q => {
+    const byUser   = attemptsByQ[q.id] || {};
+    const userIds  = Object.keys(byUser);
+    return `
+      <div class="admin-card review-q" style="margin-bottom:16px">
+        <div class="review-q-title">${esc(q.question_text)}</div>
+        <div class="review-q-meta">
+          ${formatDate(q.question_date)}
+          · Max attempts: <input type="number" class="num-input" style="width:52px;display:inline-block"
+              id="maxatt-${q.id}" value="${q.max_attempts || ''}" min="1" placeholder="∞" />
+          <button class="btn btn-ghost btn-xs" style="margin-left:6px" onclick="saveMaxAttempts('${q.id}')">Save</button>
+          · ${userIds.length} player${userIds.length !== 1 ? 's' : ''}
+        </div>
+        ${userIds.length === 0
+          ? `<div style="font-size:13px;color:var(--muted);font-style:italic">No answers yet.</div>`
+          : userIds.map(uid => {
+              const userAttempts = byUser[uid];
+              return `
+                <div class="review-user-block">
+                  <div class="review-username">${esc(userMap[uid] || uid.slice(0,8))}</div>
+                  ${userAttempts.map(a => {
+                    const reply = replyMap[a.id];
+                    return `
+                      <div class="review-attempt">
+                        <div class="review-attempt-label">Attempt ${a.attempt_number}</div>
+                        <div class="review-attempt-text">${esc(a.answer_text)}</div>
+                        ${reply
+                          ? `<div class="existing-reply-label">Your reply</div>
+                             <div class="existing-reply">${esc(reply.reply_text)}</div>
+                             <div class="reply-actions">
+                               <textarea class="review-reply-box" id="reply-${a.id}">${esc(reply.reply_text)}</textarea>
+                             </div>
+                             <div class="reply-actions">
+                               <button class="btn btn-ghost btn-xs" onclick="saveReply('${a.id}','${uid}','${q.id}')">Update reply</button>
+                               <button class="btn btn-ghost btn-xs" style="color:#B91C1C" onclick="deleteReply('${reply.id}','${a.id}')">Delete</button>
+                             </div>`
+                          : `<div class="review-reply-area">
+                               <textarea class="review-reply-box" id="reply-${a.id}" placeholder="Write a reply to this attempt…"></textarea>
+                               <button class="btn btn-ghost btn-xs" onclick="saveReply('${a.id}','${uid}','${q.id}')">Send reply</button>
+                             </div>`
+                        }
+                      </div>`;
+                  }).join('')}
+                </div>`;
+            }).join('')
+        }
+      </div>`;
+  }).join('');
+}
+
+async function savePoints(userId) {
+  const val = parseInt(document.getElementById(`pts-${userId}`)?.value, 10);
+  if (isNaN(val) || val < 0) { showToast('Invalid value.'); return; }
+  const { error } = await sb.from('profiles').update({ points: val }).eq('id', userId);
+  if (error) showToast('Could not save — try again.');
+  else showToast('Points saved!');
+}
+
+async function saveMaxAttempts(questionId) {
+  const raw = document.getElementById(`maxatt-${questionId}`)?.value;
+  const val = raw === '' ? null : parseInt(raw, 10);
+  if (val !== null && (isNaN(val) || val < 1)) { showToast('Must be 1 or more.'); return; }
+  const { error } = await sb.from('questions').update({ max_attempts: val }).eq('id', questionId);
+  if (error) showToast('Could not save — try again.');
+  else showToast(val ? `Max attempts set to ${val}.` : 'Attempts set to unlimited.');
+}
+
+async function saveReply(attemptId, userId, questionId) {
+  const text = document.getElementById(`reply-${attemptId}`)?.value?.trim();
+  if (!text) { showToast('Reply is empty.'); return; }
+  const { error } = await sb.from('replies').upsert(
+    { attempt_id: attemptId, user_id: userId, question_id: questionId, reply_text: text },
+    { onConflict: 'attempt_id' }
+  );
+  if (error) showToast('Could not save reply — try again.');
+  else { showToast('Reply saved!'); pageLoaded.admin = false; loadPage('admin', true); }
+}
+
+async function deleteReply(replyId, attemptId) {
+  const { error } = await sb.from('replies').delete().eq('id', replyId);
+  if (error) showToast('Could not delete — try again.');
+  else { showToast('Reply deleted.'); pageLoaded.admin = false; loadPage('admin', true); }
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function formatDate(s) {
+  return new Date(s + 'T00:00:00')
+    .toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('auth-screen').style.display === 'none') return;
+  const loginVisible = !document.getElementById('login-form').classList.contains('hidden');
+  if (loginVisible) handleLogin(); else handleSignup();
+});
+
+init().catch(e => { console.error('Init error:', e); showToast('Unexpected error — check console.'); });
+</script>
+</body>
+</html>
